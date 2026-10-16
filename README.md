@@ -7,7 +7,9 @@ that floats in front of you. Whatever does not fit hangs past a pink flag at the
 where you can see it, before 9 a.m. instead of at 6 p.m.
 
 Try it: **https://ctmakc.github.io/dayspan/** (Meta Quest Browser, or any desktop browser with the
-built-in IWER emulator).
+built-in IWER emulator). Demo video: https://youtu.be/L2Wexqw8JrY. Devpost: https://devpost.com/software/dayspan
+
+![Two-hand resize](docs/media/1-stretch.jpg)
 
 Built with [IWSDK](https://iwsdk.dev) (Immersive Web SDK, WebXR) for the Meta VR Start Developer
 Competition 2026, Productivity track, New Experience division. Conceived and built from scratch in

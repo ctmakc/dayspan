@@ -21,25 +21,31 @@ SR = 48000
 INTRO = 10.3
 FONT_DIR = OUT / "fonts"
 
-ev = json.loads((OUT / "events.json").read_text())
-frames = sorted((OUT / "frames").glob("*.jpg"))
-seg = {}
-for e in ev:
-    if e["kind"] in ("seg_start", "seg_stop"):
-        seg.setdefault(e["seg"], {})[e["kind"]] = e["t"]
-vr0, vr1 = seg["vr"]["seg_start"], seg["vr"]["seg_stop"]
-mr0, mr1 = seg["mr"]["seg_start"], seg["mr"]["seg_stop"]
-n_vr = round((vr1 - vr0) * FPS)
+ev_vr = json.loads((OUT / "events_vr.json").read_text())
+ev_mr = json.loads((OUT / "events_mr.json").read_text())
+fr_vr = sorted((OUT / "frames_vr").glob("*.jpg"))
+fr_mr = sorted((OUT / "frames_mr").glob("*.jpg"))
+frames = fr_vr + fr_mr
+
+
+def seg_bounds(evs, name):
+    a = next(e["t"] for e in evs if e["kind"] == "seg_start" and e.get("seg") == name)
+    b = next(e["t"] for e in evs if e["kind"] == "seg_stop" and e.get("seg") == name)
+    return a, b
+
+
+vr0, vr1 = seg_bounds(ev_vr, "vr")
+mr0, mr1 = seg_bounds(ev_mr, "mr")
+n_vr = len(fr_vr)
 vr_len = n_vr / FPS
-
-
-def T(t: float) -> float | None:
-    """virtual clock time -> final video time"""
-    if vr0 - 0.01 <= t <= vr1 + 0.01:
-        return INTRO + (t - vr0)
-    if mr0 - 0.01 <= t <= mr1 + 0.01:
-        return INTRO + vr_len + (t - mr0)
-    return None
+# events mapped onto the final timeline
+ev = []
+for e in ev_vr:
+    if vr0 - 0.01 <= e["t"] <= vr1 + 0.01:
+        ev.append({**e, "T": INTRO + (e["t"] - vr0)})
+for e in ev_mr:
+    if mr0 - 0.01 <= e["t"] <= mr1 + 0.01:
+        ev.append({**e, "T": INTRO + vr_len + (e["t"] - mr0)})
 
 
 total = INTRO + len(frames) / FPS
@@ -63,9 +69,7 @@ dur = json.loads((OUT / "durations.json").read_text())
 starts = {"intro": 0.35}
 for e in ev:
     if e["kind"] == "scene" and e["key"] != "intro":
-        tt = T(e["t"])
-        if tt is not None:
-            starts[e["key"]] = tt + 0.15
+        starts[e["key"]] = e["T"] + 0.15
 n = int((total + 1) * SR)
 mix = np.zeros(n, dtype=np.float64)
 
@@ -105,9 +109,7 @@ SFX = {
 }
 for e in ev:
     if e["kind"] in SFX:
-        tt = T(e["t"])
-        if tt is not None:
-            add(SFX[e["kind"]], tt, 1.0)
+        add(SFX[e["kind"]], e["T"], 1.0)
 
 mix = np.clip(mix, -1, 1)
 with wave.open(str(OUT / "mix.wav"), "wb") as w:
@@ -147,9 +149,9 @@ def ass_t(x: float) -> str:
 ass = ["[Script Info]", "ScriptType: v4.00+", "PlayResX: 1920", "PlayResY: 1080", "WrapStyle: 0", "",
        "[V4+ Styles]",
        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-       "Style: Sub,Lexend SemiBold,46,&H00EFF3F2,&H00EFF3F2,&H00201B16,&HB0201B16,0,0,0,0,100,100,0,0,4,0,0,2,220,220,56,1",
-       "Style: Tag,Lexend SemiBold,26,&H00EFF3F2,&H00EFF3F2,&H00201B16,&H90201B16,0,0,0,0,100,100,0,0,4,0,0,7,40,40,36,1",
-       "Style: Card,Lexend SemiBold,64,&H00EFF3F2,&H00EFF3F2,&H00201B16,&HC0201B16,0,0,0,0,100,100,0,0,4,0,0,5,80,80,80,1",
+       "Style: Sub,Lexend SemiBold,44,&H00EFF3F2,&H00EFF3F2,&H40201B16,&H40201B16,0,0,0,0,100,100,0,0,3,10,0,2,220,220,60,1",
+       "Style: Tag,Lexend SemiBold,30,&H00EFF3F2,&H00EFF3F2,&H50201B16,&H50201B16,0,0,0,0,100,100,0,0,3,8,0,7,44,44,40,1",
+       "Style: Card,Lexend SemiBold,72,&H00EFF3F2,&H00EFF3F2,&H20201B16,&H20201B16,0,0,0,0,100,100,0,0,3,26,0,5,80,80,80,1",
        "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
 for a, b, t in cues:
     ass.append(f"Dialogue: 0,{ass_t(a)},{ass_t(b)},Sub,,0,0,0,,{t}")

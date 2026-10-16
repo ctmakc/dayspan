@@ -25,7 +25,6 @@ from playwright.async_api import async_playwright
 
 HERE = pathlib.Path(__file__).resolve().parent
 OUT = HERE / "out"
-FR = OUT / "frames"
 DUR = json.loads((OUT / "durations.json").read_text())
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:18321/"
 URL = BASE + "?clock=8:20&vclock=1"
@@ -33,6 +32,8 @@ W, H = 1920, 1080
 FPS = 25
 SCALE = 1600 / 1920  # capture at 1600x900
 HEAD = [0.0, 1.25, 0.0]
+PART = (sys.argv[2] if len(sys.argv) > 2 else "vr")  # "vr" or "mr": recorded by separate runs
+FR = OUT / f"frames_{PART}"
 
 CLOCK_JS = """
 window.__clock = (() => {
@@ -71,6 +72,7 @@ class Rec:
 
     async def ev(self, kind, **kw):
         self.events.append({"t": await self.now(), "kind": kind, **kw})
+        (OUT / f"events_{PART}.json").write_text(json.dumps(self.events, indent=0))
 
     async def wait(self, s):
         await self.js("(s)=>__clock.sleep(s)", s)
@@ -107,9 +109,23 @@ class Rec:
     async def planned(self):
         return await self.js("()=>__dayspan.totals().planned")
 
+    async def reach(self, h, title, dur):
+        """Glide to a tile, then home in again in case the tray reflowed while the hand moved."""
+        await self.glide(h, await self.tile(title), dur)
+        for _ in range(3):
+            tgt = await self.tile(title)
+            cur = (await self.js("(h)=>__dayspan.handPoint(h)", h))["p"]
+            if sum((tgt[i] - cur[i]) ** 2 for i in range(3)) < 0.006 ** 2:
+                break
+            await self.glide(h, tgt, 0.15)
+
     async def move_tile(self, title, minute=None, dest=None, h="right", t_reach=0.6, t_carry=0.7):
-        await self.glide(h, await self.tile(title), t_reach)
+        await self.wait(0.25)
+        await self.reach(h, title, t_reach)
         await self.squeeze(h, True)
+        held = (await self.js("(h)=>__dayspan.handPoint(h)", h))["held"]
+        if not held:
+            print("MISSED pick", title, flush=True)
         await self.ev("lift")
         if dest is None:
             dest = await self.span_at((await self.planned()) + 8 if minute is None else minute)
@@ -196,7 +212,7 @@ async def script(rec: Rec, pg):
         await r.park("right", 0.4)
 
     async with Scene(r, "stretch", 0.5):
-        await r.glide("right", await r.tile("Review pull requests"), 0.5)
+        await r.reach("right", "Review pull requests", 0.5)
         await r.squeeze("right", True)
         await r.ev("lift")
         await r.glide("right", await r.js("()=>__dayspan.worldOfRoot(0.07,-0.3,-0.42)"), 0.6)
@@ -236,7 +252,7 @@ async def script(rec: Rec, pg):
 
     async with Scene(r, "done", 0.4):
         await r.look(-25, 6, 0.6)
-        await r.glide("right", await r.tile("Write project proposal"), 0.6)
+        await r.reach("right", "Write project proposal", 0.6)
         await r.squeeze("right", True, 0.12)
         await r.squeeze("right", False, 0.12)
         await r.ev("chord")
@@ -248,15 +264,27 @@ async def script(rec: Rec, pg):
         await r.park("left", 0.4)
         await r.look(-33, 0, 0.8)
         await r.wait(0.6)
-
-    # mixed reality: end the VR session, sit at a table in the synthetic room, enter AR
     rec.capturing = False
     await r.ev("seg_stop", seg="vr")
-    await r.js("async()=>{await IWER_DEVICE.remote.dispatch('end_session',{})}")
-    await asyncio.sleep(1.0)
-    await r.js("()=>{IWER_DEVICE.position.set(-0.80,1.25,0.15);}")
+
+
+async def script_mr(rec: Rec, pg):
+    """Passthrough: sit at a table in the emulator's synthetic room and enter AR."""
+    r = rec
+    await r.js("()=>{IWER_DEVICE.controlMode='programmatic'; IWER_DEVICE.position.set(-0.80,1.25,0.15);}")
     await r.drv("setHead", -28, 90)
     await r.enter("#enter")
+    # the session start can reset the emulated pose: re-apply it and re-anchor Dayspan to it
+    await r.js("()=>{IWER_DEVICE.position.set(-0.80,1.25,0.15);}")
+    await r.drv("setHead", -28, 90)
+    await r.wait(0.2)
+    await r.js("()=>__dayspan.recenter()")
+    for _ in range(100):
+        await asyncio.sleep(0.1)
+        if await r.js("()=>__dayspan.anchored()"):
+            break
+    await r.wait(1.5)
+    await r.js("()=>{IWER_DEVICE.hands.right.position.set(-0.55,0.8,0.0);IWER_DEVICE.hands.left.position.set(-0.55,0.8,0.4);}")
     await r.drv("calibrate", "right")
     await r.drv("calibrate", "left")
     rec.capturing = True
@@ -264,8 +292,9 @@ async def script(rec: Rec, pg):
     async with Scene(r, "mr", 0.5):
         await r.wait(2.0)
         print("desk", await r.js("()=>__dayspan.desk()"), await r.js("()=>__dayspan.mode()"), flush=True)
-        await r.wait(1.5)
-        await r.move_tile("Write project proposal", minute=40, t_reach=0.7, t_carry=0.8)
+        await r.park("right", 0.6)
+        await r.wait(0.8)
+        await r.move_tile("Write project proposal", minute=10, t_reach=0.7, t_carry=0.8)
         await r.park("right", 0.5)
 
     async with Scene(r, "outro", 1.2):
@@ -298,12 +327,12 @@ async def main():
         stop = asyncio.Event()
         cap = asyncio.create_task(capture_loop(rec, cdp, stop))
         try:
-            await script(rec, pg)
+            await (script(rec, pg) if PART == "vr" else script_mr(rec, pg))
         finally:
             stop.set()
             n = await cap
             await b.close()
-    (OUT / "events.json").write_text(json.dumps(rec.events, indent=0))
+            (OUT / f"events_{PART}.json").write_text(json.dumps(rec.events, indent=0))
     print("frames", n, f"= {n / FPS:.1f}s at {FPS} fps")
 
 
