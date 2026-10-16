@@ -1,0 +1,17 @@
+{
+  "voice": "en-US-AndrewNeural",
+  "rate": "+4%",
+  "lines": {
+    "intro": "Every morning I write a to-do list that is longer than my day. Dayspan turns the work day into an object you can hold, so the overflow shows up before nine a.m.",
+    "enter": "Your hours become a span in front of you. Every task is a tile, as long as the time it takes.",
+    "place": "Pinch a tile in the tray and drop it on the span. Everything after it slides aside.",
+    "stretch": "To resize, hold the tile with both hands and pull. Fifteen minutes is three point four centimeters, the same scale as the ruler.",
+    "fill": "Keep filling the day. Past the pink flag, tiles tip over the edge, and the panel counts the overtime.",
+    "putback": "Now the choice is right in front of you. The gym goes back in the tray, and the day fits.",
+    "lock": "Poke Lock day. The plan is saved, and today's ring appears.",
+    "done": "During the day, a quick pinch on a tile marks it done.",
+    "next": "Next morning, unfinished tiles come back with a notch for every day they were pushed.",
+    "mr": "In passthrough, Dayspan uses plane detection to find your real desk, and sets the tray down on it. Here the emulator's synthetic room stands in for a real one.",
+    "outro": "Dayspan. Hands only, seated, about ten minutes. Built with the Immersive Web SDK, running in the Quest browser."
+  }
+}

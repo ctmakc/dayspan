@@ -100,6 +100,9 @@ interface Button {
 const CLOCK = new URLSearchParams(location.search).get('clock');
 const CLOCK_BASE = CLOCK && /^\d{1,2}:\d{2}$/.test(CLOCK) ? parseInt(CLOCK.split(':')[0], 10) * 60 + parseInt(CLOCK.split(':')[1], 10) : null;
 const LOAD_T = performance.now();
+// ?timescale=0.5 slows Dayspan's own animations (used to record smooth demo footage, then sped up)
+const VCLOCK = new URLSearchParams(location.search).has('vclock');
+const TS = Math.min(1, Math.max(0.1, parseFloat(new URLSearchParams(location.search).get('timescale') ?? '1') || 1));
 function nowMinutes(): number {
   if (CLOCK_BASE != null) return CLOCK_BASE + (performance.now() - LOAD_T) / 60000;
   const now = new Date();
@@ -342,8 +345,8 @@ export class DaySystem extends createSystem({}) {
     );
     this.arcPoint(end, G.spanRadius - 0.004, -G.spanDrop + 0.02, stake.position);
     this.root.add(stake);
-    const rg = new PlaneGeometry(0.075, 0.014, 16, 1);
-    rg.translate(0.0375, 0, 0);
+    const rg = new PlaneGeometry(0.1, 0.011, 24, 1);
+    rg.translate(0.05, 0, 0);
     this.ribbonBase = Float32Array.from(rg.attributes.position.array as ArrayLike<number>);
     this.ribbon = new Mesh(
       rg,
@@ -830,10 +833,10 @@ export class DaySystem extends createSystem({}) {
     // pith
     const pith = new Mesh(new CircleGeometry(0.006, 24), new MeshBasicMaterial({ color: T.enamel, toneMapped: false }));
     this.rings.add(pith);
-    let r = 0.009;
-    const recent = hist.slice(-14);
+    let r = 0.012;
+    const recent = hist.slice(-12);
     recent.forEach((h, i) => {
-      const width = 0.003 + Math.min(1, h.doneMin / Math.max(1, h.capacityMin)) * 0.007;
+      const width = 0.004 + Math.min(1, h.doneMin / Math.max(1, h.capacityMin)) * 0.008;
       const over = h.plannedMin > h.capacityMin;
       const color = over ? T.flag : T.life;
       const ring = new Mesh(
@@ -1211,8 +1214,17 @@ export class DaySystem extends createSystem({}) {
 
   // ---------- frame ----------
   update(delta: number, time: number): void {
-    this.time = time;
-    const dt = Math.min(0.05, delta);
+    // ?vclock: a recording harness owns time (window.__clock.t, seconds) for frame-exact capture
+    const vclock = (window as unknown as { __clock?: { t: number } }).__clock;
+    let dt: number;
+    if (VCLOCK && vclock) {
+      dt = Math.max(0, Math.min(0.05, vclock.t - this.time));
+      this.time = vclock.t;
+      time = vclock.t;
+    } else {
+      this.time = time * TS;
+      dt = Math.min(0.05, delta) * TS;
+    }
     const immersive = this.world.visibilityState.peek() !== VisibilityState.NonImmersive;
     if (immersive) {
       if (!this.anchored) this.applyMode();
@@ -1289,8 +1301,8 @@ export class DaySystem extends createSystem({}) {
     for (let i = 0; i < pos.count; i++) {
       const x = this.ribbonBase[i * 3];
       const y = this.ribbonBase[i * 3 + 1];
-      const k = x / 0.075;
-      pos.setXYZ(i, x, y - k * k * 0.008, Math.sin(time * 3.1 + x * 70) * 0.006 * k);
+      const k = x / 0.1;
+      pos.setXYZ(i, x, y - k * k * 0.014, Math.sin(this.time * 3.4 + x * 60) * 0.009 * k);
     }
     pos.needsUpdate = true;
 
@@ -1311,6 +1323,7 @@ export class DaySystem extends createSystem({}) {
     const key = `${inside}|${Math.floor(mins)}`;
     if (key === this.needleKey) return;
     this.needleKey = key;
+    this.needle.visible = mins <= s.dayEnd;
     if (!inside) {
       // before the day: the needle waits at the start with a countdown
       const before = mins < s.dayStart;
