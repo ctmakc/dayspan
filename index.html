@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="Dayspan: a hands-first morning planning ritual for Meta Quest. Sort today's tasks onto a physical timeline over your desk and see what does not fit." />
+    <meta name="theme-color" content="#161B20" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23161B20'/%3E%3Cpath d='M4 22 Q16 10 28 22' stroke='%23E6E8E4' stroke-width='3' fill='none'/%3E%3Crect x='23' y='8' width='2' height='16' fill='%23FF4F8B'/%3E%3C/svg%3E" />
+    <title>Dayspan</title>
+    <style>
+      @font-face { font-family: 'Lexend'; src: url('./fonts/lexend-latin.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+      @font-face { font-family: 'Spline Sans Mono'; src: url('./fonts/spline-sans-mono-latin.woff2') format('woff2'); font-weight: 300 700; font-display: swap; }
+      :root {
+        --slate: #161B20;
+        --slate-2: #1E242A;
+        --rule-line: #2C343B;
+        --enamel: #E6E8E4;
+        --ink: #1C2228;
+        --chalk: #F2F3EF;
+        --mute: #9AA3AA;
+        --flag: #FF4F8B;
+        --focus: #2F6B6E;
+        --meet: #B4533A;
+        --admin: #5B6C93;
+        --life: #6F8A4C;
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--slate); color: var(--chalk); }
+      body { font-family: 'Lexend', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+      #scene-container { position: fixed; inset: 0; }
+      #setup {
+        position: fixed; inset: 0; z-index: 2147483000; overflow-y: auto;
+        background: var(--slate);
+        display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      }
+      #setup[hidden] { display: none; }
+      .side {
+        padding: clamp(28px, 5vw, 72px) clamp(20px, 4vw, 56px);
+        border-right: 1px solid var(--rule-line);
+        display: flex; flex-direction: column; gap: 28px;
+      }
+      .mark { font-weight: 700; font-size: clamp(44px, 6vw, 84px); letter-spacing: -0.035em; line-height: 0.92; margin: 0; }
+      .lede { font-size: clamp(18px, 1.6vw, 22px); line-height: 1.4; max-width: 30ch; margin: 0; color: var(--chalk); }
+      .lede em { font-style: normal; color: var(--flag); }
+      svg.span { width: 100%; max-width: 440px; height: auto; display: block; }
+      .steps { list-style: none; margin: 0; padding: 0; max-width: 420px; }
+      .steps li { display: grid; grid-template-columns: 44px 1fr; gap: 8px; padding: 12px 0; border-top: 1px solid var(--rule-line); font-size: 15px; line-height: 1.45; color: var(--chalk); }
+      .steps li:last-child { border-bottom: 1px solid var(--rule-line); }
+      .steps b { font-family: 'Spline Sans Mono', ui-monospace, monospace; font-weight: 600; color: var(--mute); font-size: 13px; padding-top: 2px; }
+      .main { padding: clamp(28px, 5vw, 72px) clamp(20px, 4vw, 64px); display: flex; flex-direction: column; gap: 18px; max-width: 760px; }
+      label.cap { font-family: 'Spline Sans Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+      textarea {
+        width: 100%; min-height: 300px; resize: vertical;
+        background: var(--slate-2); color: var(--chalk);
+        border: 1px solid var(--rule-line); border-left: 3px solid var(--enamel);
+        padding: 16px 18px; font: 500 16px/1.7 'Spline Sans Mono', ui-monospace, monospace;
+        outline: none; border-radius: 0;
+        transition: border-color 160ms var(--ease-out);
+      }
+      textarea:focus { border-color: var(--mute); border-left-color: var(--flag); }
+      .row { display: flex; gap: 16px; align-items: end; flex-wrap: wrap; }
+      .field { display: flex; flex-direction: column; gap: 6px; }
+      select { background: var(--slate-2); color: var(--chalk); border: 1px solid var(--rule-line); padding: 10px 12px; font: 500 16px 'Spline Sans Mono', monospace; border-radius: 0; }
+      #sum { font-size: 15px; color: var(--mute); margin: 0; }
+      #sum b { color: var(--chalk); font-weight: 600; }
+      #sum em { font-style: normal; color: var(--flag); }
+      .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+      button { font: 600 16px 'Lexend', sans-serif; border: 0; border-radius: 0; padding: 16px 22px; cursor: pointer; transition: transform 140ms var(--ease-out), background-color 140ms var(--ease-out); }
+      button:disabled { opacity: .4; cursor: not-allowed; }
+      button:active { transform: translateY(1px) scale(0.99); }
+      button:focus-visible { outline: 2px solid var(--flag); outline-offset: 3px; }
+      .primary { background: var(--enamel); color: var(--ink); }
+      .primary:hover { background: #FFFFFF; }
+      .ghost { background: transparent; color: var(--chalk); box-shadow: inset 0 0 0 1px var(--rule-line); }
+      .ghost:hover { box-shadow: inset 0 0 0 1px var(--mute); }
+      .link { background: none; padding: 0; color: var(--mute); font-weight: 500; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+      #xr-status { font-size: 14px; color: var(--mute); margin: 0; max-width: 60ch; line-height: 1.5; }
+      .fine { font-size: 13px; color: var(--mute); line-height: 1.55; margin: 0; max-width: 62ch; }
+      #back { position: fixed; z-index: 5; left: 16px; bottom: 16px; display: none; background: var(--slate); color: var(--chalk); box-shadow: inset 0 0 0 1px var(--rule-line); padding: 12px 16px; font-size: 14px; }
+      body.preview #back { display: block; }
+      #hint { position: fixed; z-index: 5; right: 16px; bottom: 16px; display: none; font: 500 13px 'Spline Sans Mono', monospace; color: var(--mute); background: rgba(22,27,32,.86); padding: 10px 12px; max-width: 320px; line-height: 1.5; }
+      body.preview #hint { display: block; }
+      .arc-tile { transform-box: fill-box; transform-origin: center; animation: drop 900ms var(--ease-out) both; }
+      .arc-tile:nth-of-type(2) { animation-delay: 120ms; } .arc-tile:nth-of-type(3) { animation-delay: 240ms; } .arc-tile:nth-of-type(4) { animation-delay: 360ms; } .arc-tile:nth-of-type(5) { animation-delay: 480ms; }
+      .arc-over { animation: droop 700ms 900ms var(--ease-out) both; transform-box: fill-box; transform-origin: left top; }
+      @keyframes drop { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+      @keyframes droop { from { transform: none; } to { transform: rotate(9deg) translateY(2px); } }
+      @media (prefers-reduced-motion: reduce) { .arc-tile, .arc-over { animation: none; } }
+      @media (max-width: 860px) {
+        #setup { grid-template-columns: 1fr; }
+        .side { border-right: 0; border-bottom: 1px solid var(--rule-line); }
+        textarea { min-height: 240px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene-container"></div>
+    <section id="setup" aria-label="Plan setup">
+      <div class="side">
+        <h1 class="mark">Dayspan</h1>
+        <p class="lede">Your work day has a fixed size. Hold it in your hands and see <em>what will not fit</em> before 9 a.m.</p>
+        <svg class="span" viewBox="0 0 440 150" role="img" aria-label="A curved timeline with task tiles; the last tile hangs past a pink flag">
+          <path d="M14 118 Q220 18 426 118" fill="none" stroke="#2C343B" stroke-width="22" stroke-linecap="butt"/>
+          <path d="M14 118 Q186 30 344 82" fill="none" stroke="#E6E8E4" stroke-width="14"/>
+          <g>
+            <rect class="arc-tile" x="40" y="80" width="56" height="20" fill="#2F6B6E" transform="rotate(-24 68 90)"/>
+            <rect class="arc-tile" x="102" y="56" width="26" height="20" fill="#B4533A" transform="rotate(-15 115 66)"/>
+            <rect class="arc-tile" x="134" y="46" width="70" height="20" fill="#5B6C93" transform="rotate(-6 169 56)"/>
+            <rect class="arc-tile" x="212" y="45" width="48" height="20" fill="#6F8A4C" transform="rotate(4 236 55)"/>
+            <rect class="arc-tile" x="266" y="52" width="62" height="20" fill="#2F6B6E" transform="rotate(13 297 62)"/>
+          </g>
+          <rect x="342" y="40" width="3" height="74" fill="#1C2228" stroke="#E6E8E4" stroke-width="0.5"/>
+          <path d="M345 42 l40 4 l-6 6 l6 6 l-40 -3 z" fill="#FF4F8B"/>
+          <g class="arc-over"><rect x="350" y="80" width="54" height="20" fill="#2F6B6E" transform="rotate(24 377 90)"/><rect x="350" y="96" width="54" height="4" fill="#FF4F8B" transform="rotate(24 377 90)"/></g>
+        </svg>
+        <ol class="steps">
+          <li><b>01</b><span>Pinch a tile in the tray and drop it on the span in front of you. Tiles are as long as the time they take.</span></li>
+          <li><b>02</b><span>Hold a tile with both hands and pull apart to add time, push together to trim. Fifteen minute steps.</span></li>
+          <li><b>03</b><span>Anything past the pink flag is overtime. Trim, or put it back in the tray for tomorrow.</span></li>
+          <li><b>04</b><span>Poke <i>Lock day</i>. Pinch-tap tiles as you finish them. Each locked day grows a ring.</span></li>
+        </ol>
+      </div>
+      <div class="main">
+        <label class="cap" for="tasks">Today, one task per line, with a duration</label>
+        <textarea id="tasks" spellcheck="false" aria-describedby="sum"></textarea>
+        <p id="sum" aria-live="polite"></p>
+        <div class="row">
+          <div class="field"><label class="cap" for="start">Day starts</label><select id="start"></select></div>
+          <div class="field"><label class="cap" for="end">Day ends</label><select id="end"></select></div>
+          <button class="link" id="sample" type="button">Load the sample day</button>
+        </div>
+        <div class="actions">
+          <button class="primary" id="enter" type="button">Enter mixed reality</button>
+          <button class="ghost" id="enter-vr" type="button">Enter VR studio</button>
+          <button class="ghost" id="preview" type="button">Preview on this screen</button>
+        </div>
+        <p id="xr-status"></p>
+        <p class="fine">Formats: <code>Write proposal 90m</code>, <code>Client call 45 min</code>, <code>Deep work 1h30</code>. Add <code>#focus #meet #admin #life</code> to set a colour, otherwise Dayspan guesses. Everything stays in this browser (localStorage); nothing is sent anywhere.</p>
+      </div>
+    </section>
+    <button id="back" type="button">Edit tasks</button>
+    <div id="hint">Mouse preview: drag tiles onto the span, scroll over a tile to resize, click panel buttons.</div>
+    <script type="module" src="/src/index.ts"></script>
+  </body>
+</html>
